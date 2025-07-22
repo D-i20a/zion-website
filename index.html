@@ -1,0 +1,1723 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>团队工作繁忙度管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <!-- 添加SheetJS库用于Excel导出 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: #f0f5ff;
+        }
+        .progress-bar {
+            transition: width 0.5s ease-in-out;
+        }
+        .tab-active {
+            border-bottom: 3px solid #3b82f6;
+            color: #3b82f6;
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 4px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            animation: slideIn 0.3s, fadeOut 0.5s 2.5s forwards;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; visibility: hidden; }
+        }
+        .highlight {
+            background-color: #ffff99;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+        .rating-s {
+            background-color: #9333ea;
+            color: white;
+        }
+        .rating-a-plus {
+            background-color: #ef4444;
+            color: white;
+        }
+        .rating-a {
+            background-color: #f97316;
+            color: white;
+        }
+        .rating-b {
+            background-color: #3b82f6;
+            color: white;
+        }
+        .rating-b-minus {
+            background-color: #10b981;
+            color: white;
+        }
+        .rating-c {
+            background-color: #6b7280;
+            color: white;
+        }
+        .month-dropdown {
+            position: relative;
+        }
+        .month-dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            background-color: white;
+            min-width: 160px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+            z-index: 10;
+            border-radius: 0.5rem;
+            padding: 0.5rem 0;
+            margin-top: 0.5rem;
+        }
+        .month-dropdown:hover .month-dropdown-content {
+            display: block;
+        }
+        .month-item {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .month-item:hover {
+            background-color: #f3f4f6;
+        }
+        .month-active {
+            background-color: #ebf5ff;
+            color: #3b82f6;
+            font-weight: 500;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 200px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        .sortable-header {
+            cursor: pointer;
+        }
+        .sortable-header:hover {
+            background-color: #f3f4f6;
+        }
+        .sort-icon {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            margin-left: 4px;
+        }
+        /* 历史项目样式 */
+        .historical-project {
+            opacity: 0.6;
+            background-color: #f3f4f6;
+            border: 1px dashed #d1d5db;
+        }
+        .historical-badge {
+            background-color: #9ca3af;
+            color: white;
+            font-size: 0.6rem;
+            padding: 0.1rem 0.3rem;
+            border-radius: 0.25rem;
+            margin-left: 0.25rem;
+            vertical-align: middle;
+        }
+        /* 成员历史记录样式 */
+        .member-history-toggle {
+            cursor: pointer;
+            user-select: none;
+        }
+        .member-history-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .member-history-content.show {
+            max-height: 500px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">团队工作繁忙度管理系统</h1>
+            <div class="h-1 w-24 bg-blue-500"></div>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <div class="flex border-b">
+                <button id="tab-projects" class="px-6 py-3 font-medium tab-active">项目列表</button>
+                <button id="tab-members" class="px-6 py-3 font-medium text-gray-600">团队成员繁忙度</button>
+            </div>
+
+            <div id="projects-view" class="mt-6 fade-in">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-800">项目列表</h2>
+                    <div class="flex items-center space-x-3">
+                        <!-- 月份选择下拉菜单 -->
+                        <div class="month-dropdown">
+                            <button id="month-selector-btn" class="flex items-center bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-md transition-all">
+                                <span id="current-month-text">1月</span>
+                                <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                            </button>
+                            <div class="month-dropdown-content" id="month-dropdown">
+                                <!-- 月份选项将在这里动态生成 -->
+                            </div>
+                        </div>
+                        <div class="flex space-x-2">
+                            <!-- 导出Excel按钮 -->
+                            <button id="export-excel-btn" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md flex items-center tooltip">
+                                <i class="fas fa-file-export mr-2"></i> 导出Excel
+                                <span class="tooltiptext">导出当前月份的项目和成员数据到Excel</span>
+                            </button>
+                            <button id="copy-to-next-month-btn" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md flex items-center tooltip">
+                                <i class="fas fa-copy mr-2"></i> 复制到下月
+                                <span class="tooltiptext">将当前月份的项目复制到下个月，人员评级独立</span>
+                            </button>
+                            <button id="new-project-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md flex items-center">
+                                <i class="fas fa-plus mr-2"></i> 新建项目
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-white">
+                        <thead>
+                            <tr class="bg-gray-100 text-gray-600 uppercase text-sm leading-normal">
+                                <th class="py-3 px-6 text-left">项目名称</th>
+                                <th class="py-3 px-6 text-left sortable-header" id="sort-status">
+                                    项目状态
+                                    <span class="sort-icon"><i class="fas fa-sort"></i></span>
+                                </th>
+                                <th class="py-3 px-6 text-left">项目成员</th>
+                                <th class="py-3 px-6 text-left">项目情况</th>
+                                <th class="py-3 px-6 text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="projects-table" class="text-gray-600 text-sm">
+                            <!-- 项目数据将在这里动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="no-projects" class="text-center py-8 text-gray-500">
+                    暂无项目数据，请点击"新建项目"添加
+                </div>
+            </div>
+
+            <div id="members-view" class="mt-6 hidden fade-in">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold text-gray-800">团队成员繁忙度排名</h2>
+                    <div class="flex items-center space-x-3">
+                        <!-- 成员页面的月份选择下拉菜单 -->
+                        <div class="month-dropdown">
+                            <button id="member-month-selector-btn" class="flex items-center bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-md transition-all">
+                                <span id="member-current-month-text">1月</span>
+                                <i class="fas fa-chevron-down ml-2 text-xs"></i>
+                            </button>
+                            <div class="month-dropdown-content" id="member-month-dropdown">
+                                <!-- 月份选项将在这里动态生成 -->
+                            </div>
+                        </div>
+                        <!-- 成员页面的导出Excel按钮 -->
+                        <button id="export-members-excel-btn" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md flex items-center tooltip">
+                            <i class="fas fa-file-export mr-2"></i> 导出Excel
+                            <span class="tooltiptext">导出当前月份的成员繁忙度数据到Excel</span>
+                        </button>
+                        <div class="relative">
+                            <input id="member-search" type="text" placeholder="搜索成员..." class="pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                        </div>
+                    </div>
+                </div>
+                <div id="members-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- 成员繁忙度数据将在这里动态生成 -->
+                </div>
+                <div id="no-members" class="text-center py-8 text-gray-500">
+                    暂无团队成员数据，请先添加项目并分配成员
+                </div>
+                <div id="no-search-results" class="text-center py-8 text-gray-500 hidden">
+                    没有找到匹配的成员
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建/编辑项目模态框 -->
+    <div id="project-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 fade-in">
+            <div class="flex justify-between items-center mb-6">
+                <h3 id="modal-title" class="text-xl font-semibold text-gray-800">新建项目</h3>
+                <div class="flex items-center space-x-2">
+                    <button type="submit" form="project-form" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                        保存
+                    </button>
+                    <button id="close-modal" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <form id="project-form">
+                <input type="hidden" id="project-id">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="project-name">
+                        项目名称 <span class="text-red-500">*</span>
+                    </label>
+                    <input id="project-name" type="text" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="project-status">
+                        项目状态 <span class="text-red-500">*</span>
+                    </label>
+                    <select id="project-status" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+                        <option value="">请选择项目状态</option>
+                        <option value="投标阶段">投标阶段</option>
+                        <option value="前期概念">前期概念</option>
+                        <option value="深化阶段">深化阶段</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">
+                        项目成员 <span class="text-red-500">*</span>
+                    </label>
+                    <div class="flex flex-wrap items-center gap-2 mb-2">
+                        <input id="new-member-input" type="text" class="shadow appearance-none border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline flex-grow" placeholder="输入成员姓名后按回车添加">
+                        <button type="button" id="add-member-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-md">
+                            添加
+                        </button>
+                    </div>
+                    <div id="members-tags" class="flex flex-wrap gap-2 mt-2">
+                        <!-- 成员标签将在这里动态生成 -->
+                    </div>
+                    <div id="members-ratings" class="mt-4 space-y-3">
+                        <!-- 成员评级将在这里动态生成（仅编辑模式显示） -->
+                    </div>
+                    <input type="hidden" id="project-members" required>
+                    <input type="hidden" id="project-member-ratings">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="project-info">
+                        项目情况
+                    </label>
+                    <textarea id="project-info" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" rows="3"></textarea>
+                </div>
+                <div class="flex justify-end mt-6">
+                    <button type="button" id="cancel-project" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                        取消
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 项目详情模态框 -->
+    <div id="project-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 fade-in">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-semibold text-gray-800">项目详情</h3>
+                <button id="close-detail-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="project-detail-content" class="space-y-4">
+                <!-- 项目详情内容将在这里动态生成 -->
+            </div>
+            <div class="mt-6 border-t pt-4">
+                <h4 class="font-medium text-gray-700 mb-2">历史参与人员</h4>
+                <div id="project-history-members" class="space-y-2">
+                    <!-- 历史参与人员将在这里动态生成 -->
+                </div>
+            </div>
+            <div class="flex justify-end mt-6">
+                <button type="button" id="edit-project-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded mr-2">
+                    编辑项目
+                </button>
+                <button type="button" id="close-detail-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 复制项目确认模态框 -->
+    <div id="copy-confirm-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 fade-in">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-800">确认复制项目</h3>
+                <button id="close-copy-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="mb-6">
+                <p class="text-gray-700">确定要将当前月份(<span id="copy-from-month" class="font-semibold"></span>)的项目复制到下个月(<span id="copy-to-month" class="font-semibold"></span>)吗？</p>
+                <p class="text-gray-600 mt-2 text-sm">注意：</p>
+                <ul class="text-gray-600 text-sm list-disc pl-5 mt-1">
+                    <li>项目基本信息将被复制（名称、状态、情况）</li>
+                    <li>项目成员将被复制，但成员评级将重置</li>
+                    <li>目标月份中已存在的同名项目将被跳过</li>
+                </ul>
+            </div>
+            <div class="flex justify-end">
+                <button type="button" id="cancel-copy" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded mr-2">
+                    取消
+                </button>
+                <button type="button" id="confirm-copy" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                    确认复制
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示消息 -->
+    <div id="toast" class="toast hidden">
+        <span id="toast-message"></span>
+    </div>
+
+    <script>
+        // 存储项目和成员数据（按月份）
+        let monthlyData = {};
+        let currentMonth = 7; // 默认为当前月份（7月）
+        let currentProjectId = null;
+        let isEditMode = false; // 标记是否为编辑模式
+        let statusSortOrder = 'default'; // 项目状态排序方式：default, asc, desc
+        
+        // 全局历史成员记录
+        let memberHistory = {}; // 格式: { 成员名: { 项目ID: { month: 月份, rating: 评级 } } }
+
+        // 评级选项
+        const ratingOptions = [
+            { value: 'S', label: 'S', class: 'rating-s' },
+            { value: 'A+', label: 'A+', class: 'rating-a-plus' },
+            { value: 'A', label: 'A', class: 'rating-a' },
+            { value: 'B', label: 'B', class: 'rating-b' },
+            { value: 'B-', label: 'B-', class: 'rating-b-minus' },
+            { value: 'C', label: 'C', class: 'rating-c' }
+        ];
+
+        // 项目状态优先级（用于排序）
+        const statusPriority = {
+            '投标阶段': 1,
+            '前期概念': 2,
+            '深化阶段': 3
+        };
+
+        // DOM 元素
+        const monthDropdown = document.getElementById('month-dropdown');
+        const memberMonthDropdown = document.getElementById('member-month-dropdown');
+        const currentMonthText = document.getElementById('current-month-text');
+        const memberCurrentMonthText = document.getElementById('member-current-month-text');
+        const projectsView = document.getElementById('projects-view');
+        const membersView = document.getElementById('members-view');
+        const tabProjects = document.getElementById('tab-projects');
+        const tabMembers = document.getElementById('tab-members');
+        const projectsTable = document.getElementById('projects-table');
+        const membersList = document.getElementById('members-list');
+        const noProjects = document.getElementById('no-projects');
+        const noMembers = document.getElementById('no-members');
+        const noSearchResults = document.getElementById('no-search-results');
+        const memberSearch = document.getElementById('member-search');
+        const newProjectBtn = document.getElementById('new-project-btn');
+        const copyToNextMonthBtn = document.getElementById('copy-to-next-month-btn');
+        const exportExcelBtn = document.getElementById('export-excel-btn');
+        const exportMembersExcelBtn = document.getElementById('export-members-excel-btn');
+        const projectModal = document.getElementById('project-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const closeModal = document.getElementById('close-modal');
+        const cancelProject = document.getElementById('cancel-project');
+        const projectForm = document.getElementById('project-form');
+        const projectIdInput = document.getElementById('project-id');
+        const newMemberInput = document.getElementById('new-member-input');
+        const addMemberBtn = document.getElementById('add-member-btn');
+        const membersTags = document.getElementById('members-tags');
+        const membersRatings = document.getElementById('members-ratings');
+        const projectMembersInput = document.getElementById('project-members');
+        const projectMemberRatingsInput = document.getElementById('project-member-ratings');
+        const projectDetailModal = document.getElementById('project-detail-modal');
+        const closeDetailModal = document.getElementById('close-detail-modal');
+        const closeDetailBtn = document.getElementById('close-detail-btn');
+        const editProjectBtn = document.getElementById('edit-project-btn');
+        const projectDetailContent = document.getElementById('project-detail-content');
+        const projectHistoryMembers = document.getElementById('project-history-members');
+        const copyConfirmModal = document.getElementById('copy-confirm-modal');
+        const closeCopyModal = document.getElementById('close-copy-modal');
+        const cancelCopy = document.getElementById('cancel-copy');
+        const confirmCopy = document.getElementById('confirm-copy');
+        const copyFromMonth = document.getElementById('copy-from-month');
+        const copyToMonth = document.getElementById('copy-to-month');
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toast-message');
+        const sortStatusHeader = document.getElementById('sort-status');
+
+        // 初始化月份下拉菜单
+        function initMonthDropdowns() {
+            // 项目列表页面的月份下拉菜单
+            monthDropdown.innerHTML = '';
+            for (let i = 1; i <= 12; i++) {
+                const monthItem = document.createElement('div');
+                monthItem.className = `month-item ${i === currentMonth ? 'month-active' : ''}`;
+                monthItem.textContent = `${i}月`;
+                monthItem.setAttribute('data-month', i);
+                
+                monthItem.addEventListener('click', function() {
+                    const selectedMonth = parseInt(this.getAttribute('data-month'));
+                    if (selectedMonth !== currentMonth) {
+                        // 保存当前月份数据
+                        saveCurrentMonthData();
+                        
+                        // 切换到新月份
+                        currentMonth = selectedMonth;
+                        updateMonthUI();
+                        
+                        // 加载新月份数据
+                        loadCurrentMonthData();
+                        
+                        // 更新UI
+                        updateMembersWorkload();
+                        renderProjects();
+                        renderMembers();
+                        
+                        showToast(`已切换到 ${currentMonth} 月`, 'bg-blue-500 text-white');
+                    }
+                });
+                
+                monthDropdown.appendChild(monthItem);
+            }
+            
+            // 团队成员页面的月份下拉菜单
+            memberMonthDropdown.innerHTML = '';
+            for (let i = 1; i <= 12; i++) {
+                const monthItem = document.createElement('div');
+                monthItem.className = `month-item ${i === currentMonth ? 'month-active' : ''}`;
+                monthItem.textContent = `${i}月`;
+                monthItem.setAttribute('data-month', i);
+                
+                monthItem.addEventListener('click', function() {
+                    const selectedMonth = parseInt(this.getAttribute('data-month'));
+                    if (selectedMonth !== currentMonth) {
+                        // 保存当前月份数据
+                        saveCurrentMonthData();
+                        
+                        // 切换到新月份
+                        currentMonth = selectedMonth;
+                        updateMonthUI();
+                        
+                        // 加载新月份数据
+                        loadCurrentMonthData();
+                        
+                        // 更新UI
+                        updateMembersWorkload();
+                        renderProjects();
+                        renderMembers();
+                        
+                        showToast(`已切换到 ${currentMonth} 月`, 'bg-blue-500 text-white');
+                    }
+                });
+                
+                memberMonthDropdown.appendChild(monthItem);
+            }
+        }
+
+        // 更新月份UI
+        function updateMonthUI() {
+            // 更新月份文本显示
+            currentMonthText.textContent = `${currentMonth}月`;
+            memberCurrentMonthText.textContent = `${currentMonth}月`;
+            
+            // 更新月份下拉菜单项的状态
+            document.querySelectorAll('.month-item').forEach(item => {
+                const month = parseInt(item.getAttribute('data-month'));
+                if (month === currentMonth) {
+                    item.classList.add('month-active');
+                } else {
+                    item.classList.remove('month-active');
+                }
+            });
+            
+            // 更新复制到下月按钮状态
+            copyToNextMonthBtn.disabled = currentMonth === 12;
+            copyToNextMonthBtn.classList.toggle('opacity-50', currentMonth === 12);
+            copyToNextMonthBtn.classList.toggle('cursor-not-allowed', currentMonth === 12);
+        }
+
+        // 获取当前月份的数据
+        function getCurrentMonthData() {
+            if (!monthlyData[currentMonth]) {
+                monthlyData[currentMonth] = {
+                    projects: [],
+                    members: {}
+                };
+            }
+            return monthlyData[currentMonth];
+        }
+
+        // 切换标签页
+        tabProjects.addEventListener('click', () => {
+            projectsView.classList.remove('hidden');
+            membersView.classList.add('hidden');
+            tabProjects.classList.add('tab-active');
+            tabMembers.classList.remove('tab-active');
+            tabMembers.classList.add('text-gray-600');
+            tabProjects.classList.remove('text-gray-600');
+        });
+
+        tabMembers.addEventListener('click', () => {
+            projectsView.classList.add('hidden');
+            membersView.classList.remove('hidden');
+            tabProjects.classList.remove('tab-active');
+            tabMembers.classList.add('tab-active');
+            tabProjects.classList.add('text-gray-600');
+            tabMembers.classList.remove('text-gray-600');
+        });
+
+        // 搜索成员
+        memberSearch.addEventListener('input', () => {
+            const searchTerm = memberSearch.value.trim().toLowerCase();
+            filterMembers(searchTerm);
+        });
+
+        function filterMembers(searchTerm) {
+            const memberCards = membersList.querySelectorAll('.member-card');
+            let hasResults = false;
+
+            memberCards.forEach(card => {
+                const memberName = card.getAttribute('data-name').toLowerCase();
+                if (memberName.includes(searchTerm) || searchTerm === '') {
+                    card.classList.remove('hidden');
+                    hasResults = true;
+                    
+                    // 高亮匹配的文本
+                    const nameElement = card.querySelector('.member-name');
+                    if (searchTerm && nameElement) {
+                        const name = nameElement.getAttribute('data-original-name');
+                        const regex = new RegExp(`(${searchTerm})`, 'gi');
+                        nameElement.innerHTML = name.replace(regex, '<span class="highlight">$1</span>');
+                    } else if (nameElement) {
+                        nameElement.textContent = nameElement.getAttribute('data-original-name');
+                    }
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+
+            noSearchResults.classList.toggle('hidden', hasResults || searchTerm === '');
+            noMembers.classList.add('hidden');
+        }
+
+        // 打开新建项目模态框
+        newProjectBtn.addEventListener('click', () => {
+            openProjectModal();
+        });
+
+        // 关闭项目模态框
+        closeModal.addEventListener('click', () => {
+            projectModal.classList.add('hidden');
+        });
+
+        cancelProject.addEventListener('click', () => {
+            projectModal.classList.add('hidden');
+        });
+
+        // 关闭项目详情模态框
+        closeDetailModal.addEventListener('click', () => {
+            projectDetailModal.classList.add('hidden');
+        });
+
+        closeDetailBtn.addEventListener('click', () => {
+            projectDetailModal.classList.add('hidden');
+        });
+
+        // 编辑项目按钮
+        editProjectBtn.addEventListener('click', () => {
+            projectDetailModal.classList.add('hidden');
+            openProjectModal(currentProjectId);
+        });
+
+        // 添加成员标签
+        addMemberBtn.addEventListener('click', addMemberTag);
+
+        newMemberInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addMemberTag();
+            }
+        });
+
+        function addMemberTag() {
+            const memberName = newMemberInput.value.trim();
+            if (memberName) {
+                const currentMembers = projectMembersInput.value ? JSON.parse(projectMembersInput.value) : [];
+                if (!currentMembers.includes(memberName)) {
+                    currentMembers.push(memberName);
+                    projectMembersInput.value = JSON.stringify(currentMembers);
+                    renderMemberTags();
+                    
+                    // 只有在编辑模式下才更新成员评级UI
+                    if (isEditMode) {
+                        updateMemberRatingsUI();
+                    }
+                }
+                newMemberInput.value = '';
+            }
+        }
+
+        function renderMemberTags() {
+            membersTags.innerHTML = '';
+            const currentMembers = projectMembersInput.value ? JSON.parse(projectMembersInput.value) : [];
+            
+            currentMembers.forEach(member => {
+                const tag = document.createElement('div');
+                tag.className = 'bg-blue-100 text-blue-800 px-3 py-1 rounded-full flex items-center';
+                tag.innerHTML = `
+                    <span>${member}</span>
+                    <button type="button" class="ml-2 text-blue-600 hover:text-blue-800" data-member="${member}">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
+                `;
+                membersTags.appendChild(tag);
+
+                // 添加删除成员的事件
+                tag.querySelector('button').addEventListener('click', function() {
+                    const memberToRemove = this.getAttribute('data-member');
+                    const updatedMembers = currentMembers.filter(m => m !== memberToRemove);
+                    projectMembersInput.value = JSON.stringify(updatedMembers);
+                    renderMemberTags();
+                    
+                    // 只有在编辑模式下才更新成员评级UI
+                    if (isEditMode) {
+                        updateMemberRatingsUI();
+                        
+                        // 同时更新评级数据
+                        const currentRatings = projectMemberRatingsInput.value ? JSON.parse(projectMemberRatingsInput.value) : {};
+                        delete currentRatings[memberToRemove];
+                        projectMemberRatingsInput.value = JSON.stringify(currentRatings);
+                    }
+                });
+            });
+        }
+
+        // 更新成员评级UI
+        function updateMemberRatingsUI() {
+            membersRatings.innerHTML = '';
+            const currentMembers = projectMembersInput.value ? JSON.parse(projectMembersInput.value) : [];
+            const currentRatings = projectMemberRatingsInput.value ? JSON.parse(projectMemberRatingsInput.value) : {};
+            
+            if (currentMembers.length === 0 || !isEditMode) {
+                return;
+            }
+
+            const ratingTitle = document.createElement('div');
+            ratingTitle.className = 'font-medium text-gray-700 mb-2';
+            ratingTitle.textContent = '成员评级';
+            membersRatings.appendChild(ratingTitle);
+            
+            currentMembers.forEach(member => {
+                const ratingRow = document.createElement('div');
+                ratingRow.className = 'flex items-center justify-between';
+                
+                const memberName = document.createElement('div');
+                memberName.className = 'text-gray-700';
+                memberName.textContent = member;
+                
+                const ratingSelect = document.createElement('select');
+                ratingSelect.className = 'border rounded py-1 px-2 text-sm';
+                ratingSelect.setAttribute('data-member', member);
+                
+                // 添加默认选项
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = '选择评级';
+                ratingSelect.appendChild(defaultOption);
+                
+                // 添加评级选项
+                ratingOptions.forEach(option => {
+                    const optionElement = document.createElement('option');
+                    optionElement.value = option.value;
+                    optionElement.textContent = option.label;
+                    if (currentRatings[member] === option.value) {
+                        optionElement.selected = true;
+                    }
+                    ratingSelect.appendChild(optionElement);
+                });
+                
+                // 添加评级变更事件
+                ratingSelect.addEventListener('change', function() {
+                    const member = this.getAttribute('data-member');
+                    const rating = this.value;
+                    const currentRatings = projectMemberRatingsInput.value ? JSON.parse(projectMemberRatingsInput.value) : {};
+                    
+                    if (rating) {
+                        currentRatings[member] = rating;
+                    } else {
+                        delete currentRatings[member];
+                    }
+                    
+                    projectMemberRatingsInput.value = JSON.stringify(currentRatings);
+                });
+                
+                ratingRow.appendChild(memberName);
+                ratingRow.appendChild(ratingSelect);
+                membersRatings.appendChild(ratingRow);
+            });
+        }
+
+        // 打开项目模态框（新建或编辑）
+        function openProjectModal(projectId = null) {
+            currentProjectId = projectId;
+            isEditMode = projectId !== null; // 设置编辑模式标志
+            const currentData = getCurrentMonthData();
+            
+            if (projectId) {
+                // 编辑模式
+                const project = currentData.projects.find(p => p.id === projectId);
+                if (!project) return;
+
+                modalTitle.textContent = '编辑项目';
+                projectIdInput.value = project.id;
+                document.getElementById('project-name').value = project.name;
+                document.getElementById('project-status').value = project.status;
+                document.getElementById('project-info').value = project.info || '';
+                projectMembersInput.value = JSON.stringify(project.members || []);
+                projectMemberRatingsInput.value = JSON.stringify(project.memberRatings || {});
+                renderMemberTags();
+                updateMemberRatingsUI(); // 在编辑模式下显示评级UI
+            } else {
+                // 新建模式
+                modalTitle.textContent = '新建项目';
+                projectForm.reset();
+                projectIdInput.value = '';
+                projectMembersInput.value = '';
+                projectMemberRatingsInput.value = '';
+                membersTags.innerHTML = '';
+                membersRatings.innerHTML = ''; // 清空评级UI
+            }
+
+            projectModal.classList.remove('hidden');
+        }
+
+        // 提交项目表单
+        projectForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const projectId = projectIdInput.value ? parseInt(projectIdInput.value) : null;
+            const projectName = document.getElementById('project-name').value;
+            const projectStatus = document.getElementById('project-status').value;
+            const projectMembers = projectMembersInput.value ? JSON.parse(projectMembersInput.value) : [];
+            const projectMemberRatings = projectMemberRatingsInput.value ? JSON.parse(projectMemberRatingsInput.value) : {};
+            const projectInfo = document.getElementById('project-info').value;
+
+            if (!projectName || !projectStatus || projectMembers.length === 0) {
+                showToast('请填写必填项：项目名称、项目状态和项目成员', 'bg-red-500 text-white');
+                return;
+            }
+
+            const projectData = {
+                id: projectId || Date.now(),
+                name: projectName,
+                status: projectStatus,
+                members: projectMembers,
+                memberRatings: projectMemberRatings,
+                info: projectInfo
+            };
+
+            const currentData = getCurrentMonthData();
+
+            if (projectId) {
+                // 更新现有项目
+                const index = currentData.projects.findIndex(p => p.id === projectId);
+                if (index !== -1) {
+                    const oldProject = currentData.projects[index];
+                    
+                    // 更新项目前，保存历史成员记录
+                    updateMemberHistory(oldProject, projectData);
+                    
+                    currentData.projects[index] = projectData;
+                    showToast('项目已更新', 'bg-green-500 text-white');
+                }
+            } else {
+                // 添加新项目
+                currentData.projects.push(projectData);
+                showToast('项目已创建', 'bg-green-500 text-white');
+            }
+
+            updateMembersWorkload();
+            renderProjects();
+            renderMembers();
+            
+            projectModal.classList.add('hidden');
+            saveData();
+        });
+
+        // 更新成员历史记录
+        function updateMemberHistory(oldProject, newProject) {
+            // 检查哪些成员被移除了
+            const removedMembers = oldProject.members.filter(member => !newProject.members.includes(member));
+            
+            // 为被移除的成员添加历史记录
+            removedMembers.forEach(member => {
+                if (!memberHistory[member]) {
+                    memberHistory[member] = {};
+                }
+                
+                // 记录该成员在此项目的历史
+                memberHistory[member][oldProject.id] = {
+                    month: currentMonth,
+                    rating: oldProject.memberRatings?.[member] || null,
+                    projectName: oldProject.name
+                };
+            });
+            
+            // 检查评级变更
+            newProject.members.forEach(member => {
+                if (oldProject.members.includes(member)) {
+                    const oldRating = oldProject.memberRatings?.[member];
+                    const newRating = newProject.memberRatings?.[member];
+                    
+                    // 如果评级发生变化，记录旧评级
+                    if (oldRating && oldRating !== newRating) {
+                        if (!memberHistory[member]) {
+                            memberHistory[member] = {};
+                        }
+                        
+                        // 记录评级变更历史
+                        if (!memberHistory[member][oldProject.id] || 
+                            memberHistory[member][oldProject.id].rating !== oldRating) {
+                            memberHistory[member][oldProject.id] = {
+                                month: currentMonth,
+                                rating: oldRating,
+                                projectName: oldProject.name,
+                                ratingChanged: true
+                            };
+                        }
+                    }
+                }
+            });
+        }
+
+        // 项目状态排序
+        sortStatusHeader.addEventListener('click', () => {
+            // 切换排序方式
+            if (statusSortOrder === 'default') {
+                statusSortOrder = 'asc';
+            } else if (statusSortOrder === 'asc') {
+                statusSortOrder = 'desc';
+            } else {
+                statusSortOrder = 'default';
+            }
+            
+            // 更新排序图标
+            const sortIcon = sortStatusHeader.querySelector('.sort-icon');
+            if (statusSortOrder === 'default') {
+                sortIcon.innerHTML = '<i class="fas fa-sort"></i>';
+            } else if (statusSortOrder === 'asc') {
+                sortIcon.innerHTML = '<i class="fas fa-sort-up"></i>';
+            } else {
+                sortIcon.innerHTML = '<i class="fas fa-sort-down"></i>';
+            }
+            
+            // 重新渲染项目列表
+            renderProjects();
+        });
+
+        // 渲染项目列表
+        function renderProjects() {
+            const currentData = getCurrentMonthData();
+            
+            if (currentData.projects.length === 0) {
+                projectsTable.innerHTML = '';
+                noProjects.classList.remove('hidden');
+                return;
+            }
+
+            noProjects.classList.add('hidden');
+            projectsTable.innerHTML = '';
+
+            // 对项目进行排序
+            let sortedProjects = [...currentData.projects];
+            
+            if (statusSortOrder !== 'default') {
+                sortedProjects.sort((a, b) => {
+                    const priorityA = statusPriority[a.status] || 999;
+                    const priorityB = statusPriority[b.status] || 999;
+                    
+                    if (statusSortOrder === 'asc') {
+                        return priorityA - priorityB;
+                    } else {
+                        return priorityB - priorityA;
+                    }
+                });
+            }
+
+            sortedProjects.forEach(project => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-200 hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="py-3 px-6 text-left">${project.name}</td>
+                    <td class="py-3 px-6 text-left">
+                        <span class="bg-${getStatusColor(project.status)} text-white py-1 px-3 rounded-full text-xs">
+                            ${project.status}
+                        </span>
+                    </td>
+                    <td class="py-3 px-6 text-left">
+                        <div class="flex flex-wrap gap-1">
+                            ${project.members.map(member => {
+                                const rating = project.memberRatings && project.memberRatings[member];
+                                const ratingClass = rating ? getRatingClass(rating) : '';
+                                const ratingBadge = rating ? `<span class="${ratingClass} text-xs px-1 rounded ml-1">${rating}</span>` : '';
+                                return `<span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center">
+                                    ${member}${ratingBadge}
+                                </span>`;
+                            }).join('')}
+                        </div>
+                    </td>
+                    <td class="py-3 px-6 text-left">${project.info ? (project.info.length > 20 ? project.info.substring(0, 20) + '...' : project.info) : '-'}</td>
+                    <td class="py-3 px-6 text-center">
+                        <div class="flex item-center justify-center">
+                            <button class="view-project transform hover:text-blue-500 hover:scale-110 transition-all" data-id="${project.id}">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="edit-project transform hover:text-green-500 hover:scale-110 ml-3 transition-all" data-id="${project.id}">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-project transform hover:text-red-500 hover:scale-110 ml-3 transition-all" data-id="${project.id}">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                projectsTable.appendChild(row);
+            });
+
+            // 添加查看项目详情事件
+            document.querySelectorAll('.view-project').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const projectId = parseInt(this.getAttribute('data-id'));
+                    showProjectDetail(projectId);
+                });
+            });
+
+            // 添加编辑项目事件
+            document.querySelectorAll('.edit-project').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const projectId = parseInt(this.getAttribute('data-id'));
+                    openProjectModal(projectId);
+                });
+            });
+
+            // 添加删除项目事件
+            document.querySelectorAll('.delete-project').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const projectId = parseInt(this.getAttribute('data-id'));
+                    if (confirm('确定要删除这个项目吗？')) {
+                        deleteProject(projectId);
+                    }
+                });
+            });
+        }
+
+        // 显示项目详情
+        function showProjectDetail(projectId) {
+            const currentData = getCurrentMonthData();
+            const project = currentData.projects.find(p => p.id === projectId);
+            if (!project) return;
+
+            currentProjectId = projectId;
+
+            projectDetailContent.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-sm text-gray-500">项目名称</p>
+                        <p class="font-medium">${project.name}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">项目状态</p>
+                        <p>
+                            <span class="bg-${getStatusColor(project.status)} text-white py-1 px-3 rounded-full text-xs">
+                                ${project.status}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-sm text-gray-500">项目成员</p>
+                    <div class="flex flex-wrap gap-2 mt-1">
+                        ${project.members.map(member => {
+                            const rating = project.memberRatings && project.memberRatings[member];
+                            const ratingClass = rating ? getRatingClass(rating) : '';
+                            const ratingBadge = rating ? `<span class="${ratingClass} text-xs px-2 py-0.5 rounded ml-2">${rating}</span>` : '';
+                            return `<div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center">
+                                ${member}${ratingBadge}
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-sm text-gray-500">项目情况</p>
+                    <p class="whitespace-pre-line">${project.info || '-'}</p>
+                </div>
+            `;
+
+            // 渲染历史参与人员
+            renderProjectHistoryMembers(project);
+
+            projectDetailModal.classList.remove('hidden');
+        }
+
+        // 渲染项目历史参与人员
+        function renderProjectHistoryMembers(project) {
+            projectHistoryMembers.innerHTML = '';
+            
+            // 获取当前项目的所有历史成员
+            const historyMembers = [];
+            
+            // 遍历全局历史记录，找出与当前项目相关的记录
+            Object.entries(memberHistory).forEach(([memberName, projects]) => {
+                if (projects[project.id]) {
+                    const historyRecord = projects[project.id];
+                    historyMembers.push({
+                        name: memberName,
+                        month: historyRecord.month,
+                        rating: historyRecord.rating,
+                        ratingChanged: historyRecord.ratingChanged || false
+                    });
+                }
+            });
+            
+            if (historyMembers.length === 0) {
+                projectHistoryMembers.innerHTML = '<p class="text-gray-500 text-sm">暂无历史参与人员记录</p>';
+                return;
+            }
+            
+            // 按月份排序（从新到旧）
+            historyMembers.sort((a, b) => b.month - a.month);
+            
+            // 按月份分组显示
+            const monthGroups = {};
+            historyMembers.forEach(member => {
+                if (!monthGroups[member.month]) {
+                    monthGroups[member.month] = [];
+                }
+                monthGroups[member.month].push(member);
+            });
+            
+            // 渲染分组历史记录
+            Object.entries(monthGroups).forEach(([month, members]) => {
+                const monthGroup = document.createElement('div');
+                monthGroup.className = 'mb-3';
+                
+                const monthHeader = document.createElement('div');
+                monthHeader.className = 'text-sm font-medium text-gray-700 mb-1';
+                monthHeader.textContent = `${month}月`;
+                
+                const membersList = document.createElement('div');
+                membersList.className = 'flex flex-wrap gap-2';
+                
+                members.forEach(member => {
+                    const memberTag = document.createElement('div');
+                    memberTag.className = 'bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm flex items-center';
+                    
+                    const ratingClass = member.rating ? getRatingClass(member.rating) : '';
+                    const ratingBadge = member.rating ? 
+                        `<span class="${ratingClass} text-xs px-2 py-0.5 rounded ml-2">${member.rating}</span>` : '';
+                    
+                    const reasonBadge = member.ratingChanged ? 
+                        '<span class="historical-badge ml-1">评级变更</span>' : 
+                        '<span class="historical-badge ml-1">已移除</span>';
+                    
+                    memberTag.innerHTML = `${member.name}${ratingBadge}${reasonBadge}`;
+                    membersList.appendChild(memberTag);
+                });
+                
+                monthGroup.appendChild(monthHeader);
+                monthGroup.appendChild(membersList);
+                projectHistoryMembers.appendChild(monthGroup);
+            });
+        }
+
+        // 删除项目
+        function deleteProject(projectId) {
+            const currentData = getCurrentMonthData();
+            
+            // 在删除项目前，保存其成员的历史记录
+            const projectToDelete = currentData.projects.find(p => p.id === projectId);
+            if (projectToDelete) {
+                projectToDelete.members.forEach(member => {
+                    if (!memberHistory[member]) {
+                        memberHistory[member] = {};
+                    }
+                    
+                    memberHistory[member][projectId] = {
+                        month: currentMonth,
+                        rating: projectToDelete.memberRatings?.[member] || null,
+                        projectName: projectToDelete.name,
+                        deleted: true
+                    };
+                });
+            }
+            
+            currentData.projects = currentData.projects.filter(p => p.id !== projectId);
+            updateMembersWorkload();
+            renderProjects();
+            renderMembers();
+            saveData();
+            showToast('项目已删除', 'bg-red-500 text-white');
+        }
+
+        // 更新成员工作量
+        function updateMembersWorkload() {
+            const currentData = getCurrentMonthData();
+            currentData.members = {};
+            
+            // 统计每个成员参与的项目数和评级
+            currentData.projects.forEach(project => {
+                project.members.forEach(member => {
+                    if (!currentData.members[member]) {
+                        currentData.members[member] = {
+                            name: member,
+                            projects: [],
+                            workload: 0,
+                            ratings: {}
+                        };
+                    }
+                    if (!currentData.members[member].projects.includes(project.id)) {
+                        currentData.members[member].projects.push(project.id);
+                    }
+                    
+                    // 记录评级
+                    if (project.memberRatings && project.memberRatings[member]) {
+                        currentData.members[member].ratings[project.id] = project.memberRatings[member];
+                    }
+                });
+            });
+
+            // 计算繁忙度百分比
+            Object.values(currentData.members).forEach(member => {
+                member.workload = Math.min(Math.round((member.projects.length / 3) * 100), 100);
+            });
+        }
+
+        // 渲染成员繁忙度
+        function renderMembers() {
+            const currentData = getCurrentMonthData();
+            const memberArray = Object.values(currentData.members);
+            
+            if (memberArray.length === 0) {
+                membersList.innerHTML = '';
+                noMembers.classList.remove('hidden');
+                noSearchResults.classList.add('hidden');
+                return;
+            }
+
+            noMembers.classList.add('hidden');
+            membersList.innerHTML = '';
+
+            // 按繁忙度排序
+            memberArray.sort((a, b) => b.workload - a.workload);
+
+            memberArray.forEach(member => {
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-lg shadow p-4 border-l-4 member-card ' + getBusyBorderColor(member.workload);
+                card.setAttribute('data-name', member.name);
+                
+                // 获取成员的主要评级（出现最多的评级）
+                const mainRating = getMemberMainRating(member);
+                const ratingBadge = mainRating ? 
+                    `<span class="${getRatingClass(mainRating)} text-xs px-2 py-0.5 rounded-full ml-2">${mainRating}</span>` : '';
+                
+                // 获取成员的历史项目
+                const historyProjects = getMemberHistoryProjects(member.name);
+                const hasHistory = historyProjects.length > 0;
+                
+                let cardContent = `
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="font-semibold text-lg member-name" data-original-name="${member.name}">
+                            ${member.name}${ratingBadge}
+                        </h3>
+                        <span class="text-${getBusyTextColor(member.workload)} font-bold">${member.workload}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div class="bg-${getBusyColor(member.workload)} h-2.5 rounded-full progress-bar" style="width: ${member.workload}%"></div>
+                    </div>
+                    <p class="text-gray-600 text-sm mt-2">参与 ${member.projects.length} 个项目</p>
+                    <div class="mt-3">
+                        ${member.projects.map(projectId => {
+                            const project = currentData.projects.find(p => p.id === projectId);
+                            const rating = member.ratings[projectId];
+                            const ratingClass = rating ? getRatingClass(rating) : '';
+                            const ratingBadge = rating ? `<span class="${ratingClass} text-xs px-1 rounded ml-1">${rating}</span>` : '';
+                            
+                            return project ? `
+                                <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded mr-1 mb-1 flex items-center">
+                                    ${project.name}${ratingBadge}
+                                </span>
+                            ` : '';
+                        }).join('')}
+                    </div>
+                `;
+                
+                // 如果有历史项目，添加历史项目部分
+                if (hasHistory) {
+                    cardContent += `
+                        <div class="mt-3 pt-2 border-t border-gray-200">
+                            <div class="member-history-toggle flex items-center text-gray-600 text-sm cursor-pointer">
+                                <i class="fas fa-history mr-1"></i>
+                                <span>历史参与项目 (${historyProjects.length})</span>
+                                <i class="fas fa-chevron-down ml-auto"></i>
+                            </div>
+                            <div class="member-history-content mt-2">
+                                ${historyProjects.map(historyProject => {
+                                    const ratingClass = historyProject.rating ? getRatingClass(historyProject.rating) : '';
+                                    const ratingBadge = historyProject.rating ? 
+                                        `<span class="${ratingClass} text-xs px-1 rounded ml-1">${historyProject.rating}</span>` : '';
+                                    
+                                    return `
+                                        <span class="inline-block historical-project text-xs px-2 py-1 rounded mr-1 mb-1 flex items-center">
+                                            ${historyProject.projectName}${ratingBadge}
+                                            <span class="text-gray-500 text-xs ml-1">(${historyProject.month}月)</span>
+                                        </span>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                card.innerHTML = cardContent;
+                membersList.appendChild(card);
+                
+                // 添加历史项目切换事件
+                if (hasHistory) {
+                    const toggle = card.querySelector('.member-history-toggle');
+                    const content = card.querySelector('.member-history-content');
+                    
+                    toggle.addEventListener('click', () => {
+                        content.classList.toggle('show');
+                        const icon = toggle.querySelector('.fa-chevron-down, .fa-chevron-up');
+                        if (content.classList.contains('show')) {
+                            icon.classList.replace('fa-chevron-down', 'fa-chevron-up');
+                        } else {
+                            icon.classList.replace('fa-chevron-up', 'fa-chevron-down');
+                        }
+                    });
+                }
+            });
+
+            // 应用当前搜索过滤
+            if (memberSearch.value.trim()) {
+                filterMembers(memberSearch.value.trim().toLowerCase());
+            }
+        }
+
+        // 获取成员的历史项目
+        function getMemberHistoryProjects(memberName) {
+            if (!memberHistory[memberName]) {
+                return [];
+            }
+            
+            const historyProjects = [];
+            
+            Object.entries(memberHistory[memberName]).forEach(([projectId, history]) => {
+                // 确保不包括当前月份的项目
+                if (history.month !== currentMonth) {
+                    historyProjects.push({
+                        projectId: parseInt(projectId),
+                        projectName: history.projectName || `项目 #${projectId}`,
+                        month: history.month,
+                        rating: history.rating
+                    });
+                }
+            });
+            
+            // 按月份排序（从新到旧）
+            historyProjects.sort((a, b) => b.month - a.month);
+            
+            return historyProjects;
+        }
+
+        // 获取成员的主要评级（出现最多的评级）
+        function getMemberMainRating(member) {
+            if (!member.ratings || Object.keys(member.ratings).length === 0) {
+                return null;
+            }
+            
+            const ratingCounts = {};
+            Object.values(member.ratings).forEach(rating => {
+                ratingCounts[rating] = (ratingCounts[rating] || 0) + 1;
+            });
+            
+            let maxCount = 0;
+            let mainRating = null;
+            
+            // 优先级顺序：S > A+ > A > B > B- > C
+            const ratingPriority = { 'S': 6, 'A+': 5, 'A': 4, 'B': 3, 'B-': 2, 'C': 1 };
+            
+            Object.entries(ratingCounts).forEach(([rating, count]) => {
+                if (count > maxCount || (count === maxCount && ratingPriority[rating] > ratingPriority[mainRating])) {
+                    maxCount = count;
+                    mainRating = rating;
+                }
+            });
+            
+            return mainRating;
+        }
+
+        // 显示提示消息
+        function showToast(message, className) {
+            toast.className = `toast ${className}`;
+            toastMessage.textContent = message;
+            toast.classList.remove('hidden');
+            
+            // 3秒后自动隐藏
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
+
+        // 获取项目状态对应的颜色
+        function getStatusColor(status) {
+            switch (status) {
+                case '前期概念': return 'green-500';
+                case '投标阶段': return 'yellow-500';
+                case '深化阶段': return 'blue-500';
+                default: return 'gray-500';
+            }
+        }
+
+        // 获取评级对应的CSS类
+        function getRatingClass(rating) {
+            const option = ratingOptions.find(opt => opt.value === rating);
+            return option ? option.class : '';
+        }
+
+        // 获取繁忙度对应的颜色
+        function getBusyColor(workload) {
+            if (workload >= 100) return 'red-500';
+            if (workload >= 67) return 'orange-500';
+            if (workload >= 34) return 'yellow-500';
+            return 'green-500';
+        }
+
+        // 获取繁忙度对应的文本颜色
+        function getBusyTextColor(workload) {
+            if (workload >= 100) return 'red-600';
+            if (workload >= 67) return 'orange-600';
+            if (workload >= 34) return 'yellow-600';
+            return 'green-600';
+        }
+
+        // 获取繁忙度对应的边框颜色
+        function getBusyBorderColor(workload) {
+            if (workload >= 100) return 'border-red-500';
+            if (workload >= 67) return 'border-orange-500';
+            if (workload >= 34) return 'border-yellow-500';
+            return 'border-green-500';
+        }
+
+        // 保存当前月份数据
+        function saveCurrentMonthData() {
+            // 当前月份数据已经在 monthlyData 对象中，不需要额外操作
+        }
+
+        // 加载当前月份数据
+        function loadCurrentMonthData() {
+            // 确保当前月份的数据结构存在
+            if (!monthlyData[currentMonth]) {
+                monthlyData[currentMonth] = {
+                    projects: [],
+                    members: {}
+                };
+            }
+        }
+
+        // 保存所有数据到本地存储
+        function saveData() {
+            localStorage.setItem('teamMonthlyData', JSON.stringify(monthlyData));
+            localStorage.setItem('memberHistory', JSON.stringify(memberHistory));
+        }
+
+        // 从本地存储加载数据
+        function loadData() {
+            const savedData = localStorage.getItem('teamMonthlyData');
+            if (savedData) {
+                monthlyData = JSON.parse(savedData);
+            }
+            
+            const savedHistory = localStorage.getItem('memberHistory');
+            if (savedHistory) {
+                memberHistory = JSON.parse(savedHistory);
+            }
+            
+            // 确保当前月份的数据结构存在
+            loadCurrentMonthData();
+            
+            // 更新UI
+            updateMembersWorkload();
+            renderProjects();
+            renderMembers();
+        }
+
+        // 复制项目到下个月
+        copyToNextMonthBtn.addEventListener('click', () => {
+            if (currentMonth === 12) {
+                showToast('已经是12月，无法复制到下个月', 'bg-red-500 text-white');
+                return;
+            }
+            
+            // 显示确认对话框
+            copyFromMonth.textContent = `${currentMonth}月`;
+            copyToMonth.textContent = `${currentMonth + 1}月`;
+            copyConfirmModal.classList.remove('hidden');
+        });
+
+        // 关闭复制确认对话框
+        closeCopyModal.addEventListener('click', () => {
+            copyConfirmModal.classList.add('hidden');
+        });
+
+        cancelCopy.addEventListener('click', () => {
+            copyConfirmModal.classList.add('hidden');
+        });
+
+        // 确认复制项目到下个月
+        confirmCopy.addEventListener('click', () => {
+            const fromMonth = currentMonth;
+            const toMonth = currentMonth + 1;
+            
+            // 确保源月份和目标月份的数据结构存在
+            if (!monthlyData[fromMonth]) {
+                monthlyData[fromMonth] = { projects: [], members: {} };
+            }
+            
+            if (!monthlyData[toMonth]) {
+                monthlyData[toMonth] = { projects: [], members: {} };
+            }
+            
+            const sourceProjects = monthlyData[fromMonth].projects;
+            const targetProjects = monthlyData[toMonth].projects;
+            
+            // 记录已存在的项目名称
+            const existingProjectNames = targetProjects.map(p => p.name);
+            
+            // 复制项目，但跳过已存在的同名项目
+            let copiedCount = 0;
+            let skippedCount = 0;
+            
+            sourceProjects.forEach(sourceProject => {
+                // 检查目标月份是否已存在同名项目
+                if (existingProjectNames.includes(sourceProject.name)) {
+                    skippedCount++;
+                    return; // 跳过此项目
+                }
+                
+                // 创建新项目对象，复制基本信息但重置评级
+                const newProject = {
+                    id: Date.now() + Math.floor(Math.random() * 1000) + copiedCount, // 确保ID唯一
+                    name: sourceProject.name,
+                    status: sourceProject.status,
+                    info: sourceProject.info,
+                    members: [...sourceProject.members], // 复制成员列表
+                    memberRatings: {} // 重置评级
+                };
+                
+                // 添加到目标月份
+                targetProjects.push(newProject);
+                copiedCount++;
+            });
+            
+            // 更新目标月份的成员工作量
+            if (copiedCount > 0) {
+                // 临时切换到目标月份更新数据
+                const originalMonth = currentMonth;
+                currentMonth = toMonth;
+                updateMembersWorkload();
+                currentMonth = originalMonth; // 切回原月份
+            }
+            
+            // 保存数据
+            saveData();
+            
+            // 关闭对话框并显示结果
+            copyConfirmModal.classList.add('hidden');
+            
+            if (copiedCount > 0) {
+                showToast(`已成功复制 ${copiedCount} 个项目到 ${toMonth} 月${skippedCount > 0 ? `，跳过 ${skippedCount} 个已存在的项目` : ''}`, 'bg-green-500 text-white');
+            } else if (skippedCount > 0) {
+                showToast(`所有项目在 ${toMonth} 月已存在，未复制任何项目`, 'bg-yellow-500 text-white');
+            } else {
+                showToast(`当前月份没有项目可复制`, 'bg-yellow-500 text-white');
+            }
+        });
+
+        // 导出项目数据到Excel
+        exportExcelBtn.addEventListener('click', () => {
+            exportProjectsToExcel();
+        });
+
+        // 导出成员数据到Excel
+        exportMembersExcelBtn.addEventListener('click', () => {
+            exportMembersToExcel();
+        });
+
+        // 导出项目数据到Excel
+        function exportProjectsToExcel() {
+            const currentData = getCurrentMonthData();
+            
+            if (currentData.projects.length === 0) {
+                showToast('当前月份没有项目数据可导出', 'bg-yellow-500 text-white');
+                return;
+            }
+            
+            // 创建工作簿
+            const wb = XLSX.utils.book_new();
+            
+            // 准备项目数据
+            const projectsData = currentData.projects.map(project => {
+                // 将成员和评级信息格式化为易读的字符串
+                const membersWithRatings = project.members.map(member => {
+                    const rating = project.memberRatings && project.memberRatings[member] ? project.memberRatings[member] : '';
+                    return rating ? `${member}(${rating})` : member;
+                }).join(', ');
+                
+                return {
+                    '项目名称': project.name,
+                    '项目状态': project.status,
+                    '项目成员': membersWithRatings,
+                    '项目情况': project.info || ''
+                };
+            });
+            
+            // 创建工作表
+            const ws = XLSX.utils.json_to_sheet(projectsData);
+            
+            // 设置列宽
+            const colWidths = [
+                { wch: 20 }, // 项目名称
+                { wch: 15 }, // 项目状态
+                { wch: 40 }, // 项目成员
+                { wch: 50 }  // 项目情况
+            ];
+            ws['!cols'] = colWidths;
+            
+            // 将工作表添加到工作簿
+            XLSX.utils.book_append_sheet(wb, ws, `${currentMonth}月项目列表`);
+            
+            // 导出Excel文件
+            XLSX.writeFile(wb, `团队项目列表_${currentMonth}月.xlsx`);
+            
+            showToast('项目数据已成功导出为Excel文件', 'bg-green-500 text-white');
+        }
+
+        // 导出成员数据到Excel
+        function exportMembersToExcel() {
+            const currentData = getCurrentMonthData();
+            const memberArray = Object.values(currentData.members);
+            
+            if (memberArray.length === 0) {
+                showToast('当前月份没有成员数据可导出', 'bg-yellow-500 text-white');
+                return;
+            }
+            
+            // 创建工作簿
+            const wb = XLSX.utils.book_new();
+            
+            // 准备成员数据
+            const membersData = memberArray.map(member => {
+                // 获取成员参与的项目及评级
+                const projectsWithRatings = member.projects.map(projectId => {
+                    const project = currentData.projects.find(p => p.id === projectId);
+                    if (!project) return '';
+                    
+                    const rating = member.ratings[projectId] || '';
+                    return rating ? `${project.name}(${rating})` : project.name;
+                }).join(', ');
+                
+                // 获取成员的主要评级
+                const mainRating = getMemberMainRating(member) || '';
+                
+                // 获取历史项目
+                const historyProjects = getMemberHistoryProjects(member.name);
+                const historyProjectsText = historyProjects.map(hp => 
+                    `${hp.projectName}(${hp.month}月${hp.rating ? `, ${hp.rating}` : ''})`
+                ).join(', ');
+                
+                return {
+                    '成员姓名': member.name,
+                    '主要评级': mainRating,
+                    '繁忙度': `${member.workload}%`,
+                    '参与项目数': member.projects.length,
+                    '参与项目': projectsWithRatings,
+                    '历史项目': historyProjectsText
+                };
+            });
+            
+            // 按繁忙度排序
+            membersData.sort((a, b) => {
+                const workloadA = parseInt(a['繁忙度']);
+                const workloadB = parseInt(b['繁忙度']);
+                return workloadB - workloadA;
+            });
+            
+            // 创建工作表
+            const ws = XLSX.utils.json_to_sheet(membersData);
+            
+            // 设置列宽
+            const colWidths = [
+                { wch: 15 }, // 成员姓名
+                { wch: 10 }, // 主要评级
+                { wch: 10 }, // 繁忙度
+                { wch: 12 }, // 参与项目数
+                { wch: 40 }, // 参与项目
+                { wch: 40 }  // 历史项目
+            ];
+            ws['!cols'] = colWidths;
+            
+            // 将工作表添加到工作簿
+            XLSX.utils.book_append_sheet(wb, ws, `${currentMonth}月成员繁忙度`);
+            
+            // 导出Excel文件
+            XLSX.writeFile(wb, `团队成员繁忙度_${currentMonth}月.xlsx`);
+            
+            showToast('成员繁忙度数据已成功导出为Excel文件', 'bg-green-500 text-white');
+        }
+
+        // 初始化
+        initMonthDropdowns();
+        updateMonthUI();
+        loadData();
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'962fc69d71452f77',t:'MTc1MzE1NDE1MC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
